@@ -1,0 +1,187 @@
+<html>
+
+<head>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+
+    <script src="https://argo.toundra.io/qrcode/html5-qrcode.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.0.3/highlight.min.js"></script>
+</head>
+
+<body>
+    <main class="default-content" aria-label="Content">
+        <div class="wrapper-content">
+            <style>
+                #reader {
+                    width: 640px;
+                }
+
+                @media(max-width: 600px) {
+                    #reader {
+                        width: 300px;
+                    }
+                }
+
+                .empty {
+                    display: block;
+                    width: 100%;
+                    height: 20px;
+                }
+            </style>
+            <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.0.3/styles/default.min.css">
+            <h1> HTML5 QR Code scanner</h1>
+            <div class="container">
+                <div class="row">
+                    <div class="col-12" >
+                        <div id="reader"
+                            style="display: inline-block; position: relative; padding: 0px; border: 1px solid silver;">
+                        </div>
+                        <div class="empty"></div>
+                        <div id="scanned-result"></div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="input-field col s12">
+                        <select onchange="onServerChange()" id="server">
+                            <option value="https://dev-api.stqr.io/api/v1/" selected>https://dev-api.stqr.io/api/v1/
+                            </option>
+                            <option value="https://api.stqr.io/api/v1/">https://api.stqr.io/api/v1/</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-4" >
+                        <input id="login" type="text" placeholder="login">
+                    </div>
+                    <div class="col-4" >
+                        <input id="pwd" type="text" placeholder="password">
+                    </div>
+                    <div class="col-4" >
+                        <button onclick="getSession()">Obtenir Session</button>
+                    </div>
+                    
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-4" >
+                    Session id : <div id="SessionId"></div>
+                </div>
+            </div>
+
+        </div>
+        <div class="row">
+            <div class="col-12" >
+                Nouveau Master _id : <input id="master_id" type="text">
+            </div>
+
+        </div>
+        <div class="row">
+            <div class="col-6" >
+                Scanned QR _id : <div id="scannedId"></div>
+            </div>
+            <div class="col-6" >
+                résultat : <div id="scannedIdResult"></div>
+            </div>
+        </div>
+        </div>
+
+        <script>
+            let sessionId;
+            var lastFoundQrCodeId;
+            let scannedId = document.getElementById("scannedId")
+            let scannedIdResult = document.getElementById("scannedIdResult")
+            let master_idDiv=document.getElementById("master_id")
+            master_idDiv.value="60a22237a0ef72001882159b"
+            var codesFound = 0;
+            function getSession() {
+                console.log("getSession")
+                let login = document.getElementById("login").value;
+                let pwd = document.getElementById("pwd").value;
+                let server = document.getElementById("server").value
+                let SessionIdOK = document.getElementById("SessionId")
+                var oReq = new XMLHttpRequest();
+                oReq.onload = function (response) {
+                    if (oReq.status == 200) {
+                        sessionId = JSON.parse(oReq.response).session;
+                        console.log(oReq.response.session)
+                        SessionIdOK.innerHTML = sessionId
+                    } else {
+                        SessionIdOK.innerHTML = "erruer"
+                    }
+                };
+                oReq.onerror = function (error) {
+                    SessionIdOK.innerHTML = error
+                }
+                oReq.open("post", server + "auth/login", true);
+                oReq.setRequestHeader('Content-type', 'application/x-www-form-urlencoded')
+                var params = 'email=' + login + '&password=' + pwd;
+                oReq.send(params);
+            }
+            function docReady(fn) {
+                // see if DOM is already available
+                if (document.readyState === "complete" || document.readyState === "interactive") {
+                    // call on next available tick
+                    setTimeout(fn, 1);
+                } else {
+                    document.addEventListener("DOMContentLoaded", fn);
+                }
+            }
+            docReady(function () {
+                hljs.initHighlightingOnLoad();
+                function onScanSuccess(qrCodeMessage) {
+                    console.log(qrCodeMessage)
+                    let qrCodeId;
+                    let split = qrCodeMessage.split("qr=")
+                    if(split.length>0){
+                        qrCodeId = split[split.length - 1]
+                        //this is custom qr
+                        qrCodeId = qrCodeId.replace("#","")
+                        qrCodeId = qrCodeId.replace("/","")
+                    }else{
+                        split = qrCodeMessage.split("/")
+                        qrCodeId = split[split.length - 1]
+                    }
+                    
+                    if (qrCodeId !== lastFoundQrCodeId) {
+                        lastFoundQrCodeId = qrCodeId;
+                        ++codesFound;
+                        scannedId.innerHTML = lastFoundQrCodeId;
+                        let master_id = document.getElementById("master_id").value
+                        reaffectQRCode(lastFoundQrCodeId, master_id, sessionId,)
+                    }
+                }
+                var html5QrcodeScanner = new Html5QrcodeScanner(
+                    "reader", { fps: 10, qrbox: 250 }, /* verbose= */ false);
+                html5QrcodeScanner.render(onScanSuccess, _ => { /** ignore error */ });
+            });
+
+            function reaffectQRCode(qrcodeId, master_id, sessionId) {
+                let server = document.getElementById("server").value
+                scannedIdResult.innerHTML = "Pending";
+                var oReq = new XMLHttpRequest();
+                let success
+                oReq.onload = function (response) {
+                    if (oReq.status == 200) {
+                        success = JSON.parse(oReq.response).success;
+                        console.log(oReq.response.success)
+                        scannedIdResult.innerHTML = success
+                        scannedIdResult.style.color="#2DE524";
+                    } else {
+                        scannedIdResult.innerHTML = "erreur"
+                        scannedIdResult.style.color="#E5245C";
+                    }
+                };
+                oReq.onerror = function (error) {
+                    scannedIdResult.innerHTML = error
+                    scannedIdResult.style.color="#E5245C";
+                }
+                oReq.open("post", server + "qrcodes", true);
+                oReq.setRequestHeader('Content-type', 'application/x-www-form-urlencoded')
+                var params = 'sessionId=' + sessionId + '&masterId=' + master_id + '&id=' + qrcodeId;
+                oReq.send(params);
+            }
+        </script>
+        </div>
+    </main>
+</body>
+
+</html>
